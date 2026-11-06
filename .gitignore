@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/build/
+**/.state/
+*.pem
+*.pfx
+*.key
+environment.json
+result.json
+/Sync-SetupDocumentation.ps1
