@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
 cmake_minimum_required(VERSION 3.21)
 project(mqttv5_device_c LANGUAGES C)
 set(CMAKE_C_STANDARD 99)

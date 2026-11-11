@@ -1,24 +1,19 @@
 # Azure IoT Hub MQTT v5 and ADR preview samples
 
-Engineering-review evaluation samples for Azure IoT Hub with the MQTT v5 connection profile.
+Evaluation samples for Azure IoT Hub with the MQTT v5 connection profile.
 These are not a production deployment framework. Azure resources incur charges.
 No live deployments or end-to-end device runs have been performed for this sample
 collection yet; builds and offline checks are not service-conformance evidence.
 
-## Review status
+## Preview limitations
 
-This is a private engineering-review draft, not a customer-ready release.
-
-- Service Tree association remains a follow-up; it is not represented as approved.
 - C builds require separately prepared dependency sources and static OpenSSL.
   Their installation is not automated, and a clean-machine build is not yet validated.
 - Preview CLI distribution/access must be confirmed before customer onboarding.
 - Live validation must cover standard and custom scenarios in both C and .NET.
-- License/provenance review and maintenance/contribution arrangements must be
-  completed before public release. SDK sources and third-party binaries are not
-  vendored into this repository.
+- SDK sources and third-party binaries are not vendored into this repository.
 
-Reviewers should leave file-specific comments on the pull request. Include the
+When reporting an issue or reviewing a pull request, include the
 language, scenario, tool versions, and sanitized error when reporting a failure;
 never attach enrollment keys, operational credentials, or private run directories.
 
@@ -233,3 +228,68 @@ SDK's required memory workspaces. Run
 credential-directory, and failure-output checks.
 Builds and offline tests do not deploy resources or certify the service flow.
 Public release, live deployment and final end-to-end validation are separate steps.
+
+## Privacy and telemetry
+
+See the [data collection notice](PRIVACY).
+
+The setup script sends resource configuration and identity information to Azure.
+The live device scenarios send generated test IDs, scenario/language labels,
+a synthetic temperature value, and provisioning/device information to the Azure
+resources you configure. The standard scenario also sends direct-method and
+twin-property test data. Results are written to the local private run directory.
+Use synthetic data rather than personal or confidential data in these samples.
+
+The scripts invoke Azure CLI and the .NET SDK, which have their own usage
+telemetry. To opt out, set these variables in PowerShell **before** installing
+or running the tools and before invoking the sample scripts:
+
+```powershell
+$env:AZURE_CORE_COLLECT_TELEMETRY = '0'
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+```
+
+These settings apply to the current PowerShell session and its child processes.
+Repeat them in each new session. See
+[Azure CLI configuration](https://learn.microsoft.com/cli/azure/azure-cli-configuration)
+and [.NET SDK telemetry](https://learn.microsoft.com/dotnet/core/tools/telemetry).
+
+Tool telemetry opt-outs do not stop the Azure service requests or device messages
+required by live sample scenarios. To avoid those requests, do not run setup or
+the standard/custom scenarios; use the [offline checks](#offline-validation)
+instead. Builds and dependency preparation can still contact package feeds and
+GitHub to download dependencies. Azure services and other installed development
+tools have their own privacy settings and terms.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution, CLA, and validation
+instructions.
+
+## Code of conduct
+
+This project has adopted the
+[Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information, see the
+[Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/)
+or contact [opencode@microsoft.com](mailto:opencode@microsoft.com).
+
+## Security
+
+Do not report security vulnerabilities in public GitHub issues. Report them
+privately to the [Microsoft Security Response Center](https://msrc.microsoft.com/create-report).
+See [SECURITY.md](SECURITY.md) for reporting instructions.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE.TXT).
+External dependencies retain their own licenses; see [NOTICE](NOTICE).
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services.
+Authorized use of Microsoft trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks).
+Use of Microsoft trademarks or logos in modified versions of this project must
+not cause confusion or imply Microsoft sponsorship. Any use of third-party
+trademarks or logos is subject to those third-party's policies.

@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
 [CmdletBinding()]
 param([string] $Executable = (Join-Path $PSScriptRoot 'build\mqttv5-device.exe'))
 $ErrorActionPreference = 'Stop'
