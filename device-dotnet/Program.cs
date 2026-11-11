@@ -12,6 +12,7 @@ using Microsoft.Azure.Iot.Device.Mqtt;
 using Microsoft.Azure.Iot.Device.MQTTv5.Connection;
 using Microsoft.Azure.Iot.Device.MQTTv5.CustomTopics;
 using Microsoft.Azure.Iot.Device.MQTTv5.DirectMethods;
+using Microsoft.Azure.Iot.Device.MQTTv5.Models;
 using Microsoft.Azure.Iot.Device.MQTTv5.Telemetry;
 using Microsoft.Azure.Iot.Device.MQTTv5.Twin;
 
@@ -39,9 +40,10 @@ var provisioning = new ProvisioningSettings(idScope)
     CertificateSigningRequest = new(operationalKey, CreateCsr(registrationId, operationalKey))
 };
 var authentication = new SymmetricKeyAuthenticationProvider(
-    registrationId, idScope, Convert.FromBase64String(Required("MQTTV5_ENROLLMENT_KEY")), operationalKey);
+    registrationId, idScope, Convert.FromBase64String(Required("MQTTV5_ENROLLMENT_KEY")),
+    secondarySymmetricKey: null, issuedCertificatePrivateKey: operationalKey);
 Environment.SetEnvironmentVariable("MQTTV5_ENROLLMENT_KEY", null);
-using var connection = new ConnectionClient(null, new TwinPushOptions { ReceiveDesiredPropertyUpdates = true });
+using var connection = new ConnectionClient(new ConnectionClientOptions { ReceiveDesiredPropertyUpdates = true });
 using var telemetry = new TelemetryClient(connection);
 using var topics = new CustomTopicsClient(connection);
 using var twin = new TwinClient(connection);
@@ -107,7 +109,7 @@ if (scenario == "standard")
         await Task.Delay(100, timeout.Token);
     }
 }
-await connection.DisconnectAsync(timeout.Token);
+await connection.DisconnectAsync(cancellationToken: timeout.Token);
 Console.WriteLine("MQTTV5_COMPLETE");
 
 static string Required(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value

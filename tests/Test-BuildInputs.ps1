@@ -26,4 +26,13 @@ foreach ($name in @('SdkRoot', 'DependencyDirectory', 'OpenSslRoot')) {
         Where-Object { $_ -is [Management.Automation.ParameterAttribute] -and $_.Mandatory })
     if ($mandatory.Count -eq 0) { throw "C build parameter must be mandatory: $name" }
 }
-Write-Output 'Build-input validation passed: 5 runner rejection cases and 3 mandatory C build parameters.'
+$rejected = $false
+try {
+    & $runner -BuildOnly -Language dotnet -SdkRoot 'unused-sdk'
+}
+catch {
+    if ($_.Exception.Message -notlike '-SdkRoot applies only to C builds.*') { throw }
+    $rejected = $true
+}
+if (-not $rejected) { throw '.NET source SDK override was silently ignored.' }
+Write-Output 'Build-input validation passed: 6 runner rejection cases and 3 mandatory C build parameters.'

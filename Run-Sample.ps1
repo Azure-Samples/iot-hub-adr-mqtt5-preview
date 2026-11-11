@@ -15,6 +15,9 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $IsWindows) { throw 'This runner currently supports Windows. The C source can be built separately on other platforms.' }
+if ($Language -eq 'dotnet' -and $SdkRoot) {
+    throw '-SdkRoot applies only to C builds. The .NET sample uses the pinned NuGet package.'
+}
 if ($Language -eq 'c' -and -not $CExecutable -and
     ([string]::IsNullOrWhiteSpace($CDependencyDirectory) -or [string]::IsNullOrWhiteSpace($COpenSslRoot))) {
     throw 'Building C requires -CDependencyDirectory and -COpenSslRoot. See device-c/README.md, or supply an existing -CExecutable.'
@@ -28,15 +31,15 @@ if (-not $BuildOnly) {
         if (-not $manifest[$key]) { throw "Manifest is missing $key." }
     }
 }
-$sdk = & (Join-Path $PSScriptRoot 'Initialize-Sdk.ps1') -SdkRoot $SdkRoot
 if ($Language -eq 'dotnet') {
-    & dotnet build (Join-Path $PSScriptRoot 'device-dotnet\Device.csproj') -c Release --nologo "-p:IotSdkDirectory=$sdk"
+    & dotnet build (Join-Path $PSScriptRoot 'device-dotnet\Device.csproj') -c Release --nologo
     if ($LASTEXITCODE -ne 0) { throw '.NET device build failed.' }
     $deviceExecutable = (Get-Command dotnet -ErrorAction Stop).Source
     $deviceArgument = Join-Path $PSScriptRoot 'device-dotnet\bin\Release\net10.0\Device.dll'
 }
 else {
     if (-not $CExecutable) {
+        $sdk = & (Join-Path $PSScriptRoot 'Initialize-Sdk.ps1') -SdkRoot $SdkRoot
         $CExecutable = & (Join-Path $PSScriptRoot 'device-c\Build.ps1') -SdkRoot $sdk `
             -DependencyDirectory $CDependencyDirectory -OpenSslRoot $COpenSslRoot
     }

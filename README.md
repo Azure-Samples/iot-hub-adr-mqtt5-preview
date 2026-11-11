@@ -62,18 +62,26 @@ a successful publish as proof of delivery.
 
 ### SDK version boundary
 
-Both device implementations use the source SDK at commit
-`798941ba4440c5f540084af4863c0cd40b4f9624` in
-[Azure/azure-iot-sdk](https://github.com/Azure/azure-iot-sdk/tree/798941ba4440c5f540084af4863c0cd40b4f9624).
-The published .NET `2.0.0-preview3` package does **not** export the symmetric-key
-authentication provider used by this issuance sample. Do not substitute that
-package or equate the source project's version suffix with the published binary.
-The existing documentation's package-based X.509 example is a different flow.
+| Device sample | SDK dependency |
+| --- | --- |
+| .NET | Published NuGet package [Microsoft.Azure.Iot.Device 2.0.0-preview4](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4), targeting .NET 10 |
+| C | [C 2.0.0-preview.2](https://github.com/Azure/azure-iot-sdk/releases/tag/c/2.0.0-preview.2), pinned to source commit `62f7f9580c67a8275f3c92287919ba40c01d472c` |
 
-[Initialize-Sdk.ps1](Initialize-Sdk.ps1) downloads the official SDK into a
-per-user local cache and verifies the exact revision and absence of tracked
-changes. Alternatively, pass `-SdkRoot` pointing to an existing clean checkout
-at that revision. No SDK source modifications are needed.
+The .NET sample restores the package directly and uses its MQTT v5-specific
+clients for telemetry, direct methods, twins, and custom-topic publishing.
+It supplies the CSR private key to the symmetric-key authentication provider
+so that DPS-issued certificates can be used for the Hub connection. Compilation
+and offline checks don't establish live DPS issuance or service compatibility.
+
+For C builds, [Initialize-Sdk.ps1](Initialize-Sdk.ps1) downloads the official
+SDK into a per-user local cache and verifies the exact revision and absence of
+tracked changes. Alternatively, pass `-SdkRoot` pointing to an existing clean
+checkout at that revision. No SDK source modifications are needed. The C
+dependency preparation includes the SDK's patches for Paho; see the
+[C instructions](device-c/README.md).
+
+`-SdkRoot` applies only to C builds. The .NET build and runs using an existing
+`-CExecutable` don't download an SDK source checkout.
 
 Check build prerequisites without signing in or creating Azure resources:
 
@@ -118,8 +126,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot identify the signed-in user.' }
 `-OutputPath` defaults to `environment.json` in the current directory and must
 not already exist. The output contains identifiers, not credentials.
 
-The default deployment includes one S1 IoT Hub unit, one Standard Event Hubs
-namespace with one capacity unit, two event hubs, DPS and ADR certificate
+The default deployment includes a Standard S1 MQTT v5 IoT hub with one throughput
+unit (TU), one Standard Event Hubs namespace with one capacity unit, two event hubs, DPS and ADR certificate
 resources. Check pricing and policy before executing it.
 Hub and Event Hubs service-side SAS authentication are disabled; the verifier
 uses the Azure CLI identity. DPS bootstrap symmetric keys are device onboarding
@@ -215,8 +223,13 @@ Removing local credentials does not revoke already issued certificates.
 Run [tests/Test-Setup.ps1](tests/Test-Setup.ps1) for mocked orchestration checks,
 then build the device/verifier and run both .NET executables with `--self-test`.
 Run [tests/Test-BuildInputs.ps1](tests/Test-BuildInputs.ps1) for C build-input
-validation before any SDK download or Azure operation.
+validation and rejection of .NET source-checkout overrides before any SDK
+download or Azure operation.
 The device self-test checks the signed CSR encoding; the verifier checks strict
-test-ID, scenario and language correlation. The C build runs its offline CTest.
+test-ID, scenario and language correlation. The C build runs its offline CTest,
+including initialization of both standard and custom clients with the release
+SDK's required memory workspaces. Run
+[device-c/Test-Offline.ps1](device-c/Test-Offline.ps1) after building for input,
+credential-directory, and failure-output checks.
 Builds and offline tests do not deploy resources or certify the service flow.
 Public release, live deployment and final end-to-end validation are separate steps.

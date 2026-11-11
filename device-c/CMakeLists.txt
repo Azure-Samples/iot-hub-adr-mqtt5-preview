@@ -6,7 +6,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 set(MQTTV5_SDK_ROOT "" CACHE PATH "Pinned azure-iot-sdk checkout")
 set(MQTTV5_DEPENDENCIES "" CACHE PATH "Existing FetchContent source cache")
-set(MQTTV5_SDK_COMMIT "798941ba4440c5f540084af4863c0cd40b4f9624")
+set(MQTTV5_SDK_COMMIT "62f7f9580c67a8275f3c92287919ba40c01d472c")
 find_package(Git REQUIRED)
 execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${MQTTV5_SDK_ROOT}" rev-parse HEAD
     OUTPUT_VARIABLE sdk_head OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
@@ -40,6 +40,10 @@ set(AZ_IOT_WITH_CRYPTO_OPENSSL ON CACHE BOOL "" FORCE)
 set(AZ_IOT_WITH_CRYPTO_MBEDTLS OFF CACHE BOOL "" FORCE)
 set(AZ_IOT_WITH_CERT_PROVIDER_MANAGED ON CACHE BOOL "" FORCE)
 add_subdirectory("${MQTTV5_SDK_ROOT}/c" sdk)
+get_property(paho_patched GLOBAL PROPERTY AZ_IOT_PAHO_PATCHED)
+if(NOT paho_patched)
+    message(FATAL_ERROR "Prepare Paho v1.3.16 with the pinned SDK's patches before building. See device-c/README.md.")
+endif()
 
 add_executable(mqttv5-device main.c)
 target_link_libraries(mqttv5-device PRIVATE az_iot_mqttv5 az_iot_adapter_paho

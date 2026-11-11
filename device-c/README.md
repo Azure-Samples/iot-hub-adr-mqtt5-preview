@@ -8,7 +8,8 @@ there is no silent protocol or SAS Hub fallback.
 
 ## Build (Windows x64)
 
-Tested SDK commit: **`798941ba4440c5f540084af4863c0cd40b4f9624`**.
+SDK release: **C `2.0.0-preview.2`**, pinned to commit
+**`62f7f9580c67a8275f3c92287919ba40c01d472c`**.
 Configuration verifies HEAD and rejects tracked changes in the SDK's `c` tree.
 It never changes SDK source.
 
@@ -17,9 +18,11 @@ Prerequisites:
 - Visual Studio C++ x64 tools with its CMake and Ninja components.
 - The pinned `azure-iot-sdk` checkout.
 - Existing dependency source directories `azure_sdk_for_c-src` (Azure SDK for C
-  1.5.0) and `paho_mqtt_c-src` (Eclipse Paho C v1.3.13).
+  1.5.0) and `paho_mqtt_c-src` (Eclipse Paho C v1.3.16, commit
+  `4a939ddb01eea581a32fd6f0adcfee51b91d2601`, with the pinned SDK's patches).
 - An existing static x64 OpenSSL 3 installation with headers and libraries.
 
+Use a short checkout path on Windows to avoid native object-file path limits.
 From this directory, in PowerShell 7.4 or later, prepare the SDK checkout and
 provide your dependency locations:
 
@@ -27,6 +30,32 @@ provide your dependency locations:
 $sdkCheckout = & ..\Initialize-Sdk.ps1
 $existingDependencySources = 'C:\path\to\dependency-sources'
 $staticOpenSsl = 'C:\path\to\static-openssl'
+```
+
+Prepare a **dedicated** Paho source copy before the first build. Don't modify a
+dependency checkout shared with another project. The following commands require
+Git and network access, and the destination must not already exist:
+
+```powershell
+$paho = Join-Path $existingDependencySources 'paho_mqtt_c-src'
+git clone --branch v1.3.16 --depth 1 https://github.com/eclipse/paho.mqtt.c.git $paho
+if ($LASTEXITCODE -ne 0) { throw 'Paho clone failed.' }
+Get-ChildItem (Join-Path $sdkCheckout 'c\adapters\paho\patches') -Filter '*.patch' |
+    Sort-Object Name | ForEach-Object {
+        git -C $paho apply $_.FullName
+        if ($LASTEXITCODE -ne 0) { throw "Paho patch failed: $($_.Name)" }
+    }
+```
+
+The patches supplied by the release SDK fix upstream concurrency and
+failed-write cleanup defects. The build rejects unpatched or different Paho
+revisions. For details, see the SDK's
+[dependency guidance](https://github.com/Azure/azure-iot-sdk/blob/c/2.0.0-preview.2/c/docs/dependencies.md).
+Keep the patched dependency outside this repository; don't commit its sources.
+
+With `azure_sdk_for_c-src` also prepared in the dependency directory, build:
+
+```powershell
 $exe = .\Build.ps1 -SdkRoot $sdkCheckout `
     -DependencyDirectory $existingDependencySources -OpenSslRoot $staticOpenSsl
 .\Test-Offline.ps1 -Executable $exe
@@ -47,7 +76,11 @@ or SDK modification. Obtain missing prerequisites separately.
 It builds dependencies and this executable beneath `device-c\build`; only source
 inputs are reused from your dependency directories. Build diagnostics go to the host;
 the executable's absolute path is the final and only success-stream object.
-CTest runs the C parser/input self-tests as part of the build.
+CTest runs the C parser/input and SDK initialization self-tests as part of the
+build. The SDK now uses caller-owned connection, MQTT adapter, direct-method,
+and twin workspaces instead of MQTT factories. The sample allocates those
+workspaces for the full client lifetime and requests desired-property pushes
+for the standard scenario.
 
 Verified locally with preinstalled dependencies: Release x64, MSVC 19.51,
 CMake 4.3.1, OpenSSL 3.6.5, warnings-as-errors for the companion source.
@@ -106,8 +139,8 @@ It proves **broker acknowledgement only, not destination receipt**.
 - Sends JSON `{"testId":"...","language":"c","scenario":"standard"}` via standard
   Hub telemetry, with JSON content type and UTF-8 content encoding.
 - Registers direct method `echo`, returning the supplied payload unchanged with
-  status 200. Oversized responses fail explicitly (413); the pinned SDK bounds
-  the response body.
+  status 200. Oversized responses fail explicitly (413); the sample uses the
+  SDK's default 512-byte result-body limit.
 - Applies a top-level desired `sampleTestId` matching this run's ID from either
   a desired snapshot or patch. Old/mismatching values do not complete the run.
 - Reports `{"sampleTestId":"..."}` and requires the service's reported-patch
@@ -138,7 +171,7 @@ platform DNS/TLS/transport shutdown delays.
 
 ## Offline validation and limits
 
-`Test-Offline.ps1` verifies JSON parsing (including escaped ASCII, unrelated
+`Test-Offline.ps1` verifies standard/custom SDK initialization, JSON parsing (including escaped ASCII, unrelated
 nested properties, duplicates, malformed/trailing data), required/invalid input
 rejection, per-run exclusivity, protected Windows DACL principals, and no secret
 output on failure, completion gating, and coexistence with a preexisting public
