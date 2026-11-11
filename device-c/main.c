@@ -38,6 +38,10 @@ typedef struct
     uint64_t method_time;
     const char* test_id;
     uint8_t twin_buffer[1024];
+    uint8_t connection_workspace[AZ_IOT_CONNECTION_CLIENT_DEFAULT_WORKSPACE_SIZE];
+    uint8_t mqtt_workspace[AZ_IOT_PAHO_WORKSPACE_SIZE];
+    uint8_t methods_workspace[AZ_IOT_MQTTV5_DIRECT_METHOD_CLIENT_DEFAULT_WORKSPACE_SIZE];
+    uint8_t twin_workspace[AZ_IOT_MQTTV5_TWIN_CLIENT_DEFAULT_WORKSPACE_SIZE];
 } device;
 
 static uint64_t now_ms(void)
@@ -272,7 +276,7 @@ static void on_echo(az_iot_direct_method_request request, const char* name,
 {
     device* d = (device*)context;
     (void)name;
-    if (length > AZ_IOT_MQTTV5_DM_RESULT_BODY_MAX)
+    if (length > AZ_IOT_MQTTV5_DIRECT_METHOD_CLIENT_DEFAULT_MAX_RESULT_BODY_SIZE)
     {
         (void)az_iot_mqttv5_direct_method_respond(&d->methods, request, 413, NULL, 0);
         fprintf(stderr, "Echo payload exceeds the SDK response limit.\n");
@@ -318,6 +322,71 @@ static void pump(device* d)
         (void)check(d, az_iot_mqttv5_twin_client_do_work(&d->twin), "Twin pump");
     uint64_t elapsed = now_ms() - start;
     if (elapsed < 50) sleep_ms((unsigned int)(50 - elapsed));
+}
+
+static az_iot_connection_client_options connection_options(device* d, bool standard)
+{
+    az_iot_connection_client_options options = az_iot_connection_client_options_default();
+    options.workspace = d->connection_workspace;
+    options.workspace_size = sizeof(d->connection_workspace);
+    options.mqtt_adapter = az_iot_paho_get_adapter();
+    options.mqtt_limits = (az_iot_mqtt_limits){
+        .send_buffer_size = 8u * 1024u,
+        .receive_buffer_size = 132u * 1024u,
+        .max_in_flight_messages = 8,
+        .message_store_size = 16u * 1024u,
+        .connect_strings_size = 4u * 1024u
+    };
+    options.mqtt_workspace = d->mqtt_workspace;
+    options.mqtt_workspace_size = sizeof(d->mqtt_workspace);
+    options.twin_push.push_desired = standard;
+    return options;
+}
+
+static bool initialize_clients(device* d, const az_iot_connection_client_options* options, bool standard)
+{
+    if (!check(d, az_iot_connection_client_init(&d->connection, options), "Connection init"))
+        return false;
+    d->connection_initialized = true;
+    if (!check(d, az_iot_connection_client_add_state_observer(&d->connection, on_state, d), "State observer")
+        || !check(d, az_iot_connection_client_set_operational_cert_callback(&d->connection, on_certificate, d),
+            "Certificate observer")) return false;
+    if (standard)
+    {
+        if (!check(d, az_iot_mqttv5_telemetry_client_init(&d->telemetry, &d->connection), "Telemetry init"))
+            return false;
+        d->telemetry_initialized = true;
+        az_iot_mqttv5_direct_method_client_options methods = az_iot_mqttv5_direct_method_client_options_default();
+        methods.workspace = d->methods_workspace;
+        methods.workspace_size = sizeof(d->methods_workspace);
+        if (!check(d, az_iot_mqttv5_direct_method_client_init(&d->methods, &d->connection, &methods), "Methods init"))
+            return false;
+        d->methods_initialized = true;
+        if (!check(d, az_iot_mqttv5_direct_method_client_register_method(&d->methods, "echo", 0, on_echo, d),
+            "Echo registration")) return false;
+        az_iot_mqttv5_twin_client_options twin = az_iot_mqttv5_twin_client_options_default();
+        twin.workspace = d->twin_workspace;
+        twin.workspace_size = sizeof(d->twin_workspace);
+        if (!check(d, az_iot_mqttv5_twin_client_init(&d->twin, &d->connection, &twin), "Twin init"))
+            return false;
+        d->twin_initialized = true;
+        return check(d, az_iot_mqttv5_twin_client_set_desired_handler(&d->twin, on_desired, d), "Desired handler")
+            && check(d, az_iot_mqttv5_twin_client_set_encode_buffer(&d->twin, AZ_SPAN_FROM_BUFFER(d->twin_buffer)),
+                "Twin encode buffer");
+    }
+    if (!check(d, az_iot_mqttv5_custom_topic_client_init(&d->custom, &d->connection), "Custom topic init"))
+        return false;
+    d->custom_initialized = true;
+    return true;
+}
+
+static void deinitialize_clients(device* d)
+{
+    if (d->twin_initialized) az_iot_mqttv5_twin_client_deinit(&d->twin);
+    if (d->methods_initialized) az_iot_mqttv5_direct_method_client_deinit(&d->methods);
+    if (d->custom_initialized) az_iot_mqttv5_custom_topic_client_deinit(&d->custom);
+    if (d->telemetry_initialized) az_iot_mqttv5_telemetry_client_deinit(&d->telemetry);
+    if (d->connection_initialized) az_iot_connection_client_deinit(&d->connection);
 }
 
 static bool ready_line(const char* id)
@@ -380,7 +449,18 @@ static int self_test(void)
     d.published = true;
     d.hub_idle = false;
     if (completion_allowed(&d, 0)) return 1;
-    puts("Offline tests passed: 10 JSON cases, 8 input cases, 5 completion states.");
+    for (int scenario = 0; scenario < 2; ++scenario)
+    {
+        device initialized = { 0 };
+        az_iot_connection_client_options options = connection_options(&initialized, scenario == 0);
+        options.device_id = "offline-device";
+        options.dps.id_scope = "offline-scope";
+        options.dps.registration_id = "offline-device";
+        bool ok = initialize_clients(&initialized, &options, scenario == 0);
+        deinitialize_clients(&initialized);
+        if (!ok) return 1;
+    }
+    puts("Offline tests passed: 10 JSON cases, 8 input cases, 5 completion states, 2 SDK initialization scenarios.");
     return 0;
 }
 
@@ -449,8 +529,6 @@ int main(int argc, char** argv)
     d.test_id = test_id;
     az_iot_certificate_provider_managed provider = { 0 };
     bool provider_initialized = false;
-    az_iot_mqtt_factory* v3 = NULL;
-    az_iot_mqtt_factory* v5 = NULL;
     az_iot_certificate_provider_managed_options provider_options =
         az_iot_certificate_provider_managed_options_default();
     provider_options.operational_key_pem_path = key_path;
@@ -459,7 +537,7 @@ int main(int argc, char** argv)
     if (!check(&d, az_iot_certificate_provider_managed_init(&provider, &provider_options),
         "Managed certificate provider")) goto cleanup;
     provider_initialized = true;
-    az_iot_connection_client_options options = az_iot_connection_client_options_default();
+    az_iot_connection_client_options options = connection_options(&d, standard);
     options.device_id = registration;
     options.dps.id_scope = scope;
     options.dps.registration_id = registration;
@@ -475,37 +553,9 @@ int main(int argc, char** argv)
     AZ_IOT_CSR_PAYLOAD_STORAGE(csr_buffer);
     options.csr_payload_buffer = AZ_SPAN_FROM_BUFFER(csr_buffer);
     /* hub_auth remains X.509; SAS is only for the MQTT 3.1.1 DPS bootstrap. */
-    if (!check(&d, az_iot_connection_client_init(&d.connection, &options), "Connection init"))
+    if (!initialize_clients(&d, &options, standard))
         goto cleanup;
-    d.connection_initialized = true;
-    v3 = az_iot_paho_factory_create_v3_1_1();
-    v5 = az_iot_paho_factory_create_v5();
-    if (!v3 || !v5) { fprintf(stderr, "MQTT factory allocation failed.\n"); goto cleanup; }
 #define REQUIRE(call, label) do { if (!check(&d, (call), (label))) goto cleanup; } while (0)
-    REQUIRE(az_iot_connection_client_add_state_observer(&d.connection, on_state, &d), "State observer");
-    REQUIRE(az_iot_connection_client_set_operational_cert_callback(&d.connection, on_certificate, &d),
-        "Certificate observer");
-    REQUIRE(az_iot_connection_client_register_mqtt_factory(&d.connection, v3), "DPS factory");
-    REQUIRE(az_iot_connection_client_register_mqtt_factory(&d.connection, v5), "Hub factory");
-    if (standard)
-    {
-        REQUIRE(az_iot_mqttv5_telemetry_client_init(&d.telemetry, &d.connection), "Telemetry init");
-        d.telemetry_initialized = true;
-        REQUIRE(az_iot_mqttv5_direct_method_client_init(&d.methods, &d.connection), "Methods init");
-        d.methods_initialized = true;
-        REQUIRE(az_iot_mqttv5_direct_method_client_register_method(&d.methods, "echo", 0, on_echo, &d),
-            "Echo registration");
-        REQUIRE(az_iot_mqttv5_twin_client_init(&d.twin, &d.connection), "Twin init");
-        d.twin_initialized = true;
-        REQUIRE(az_iot_mqttv5_twin_client_set_desired_handler(&d.twin, on_desired, &d), "Desired handler");
-        REQUIRE(az_iot_mqttv5_twin_client_set_encode_buffer(&d.twin, AZ_SPAN_FROM_BUFFER(d.twin_buffer)),
-            "Twin encode buffer");
-    }
-    else
-    {
-        REQUIRE(az_iot_mqttv5_custom_topic_client_init(&d.custom, &d.connection), "Custom topic init");
-        d.custom_initialized = true;
-    }
     REQUIRE(az_iot_connection_client_open(&d.connection), "Connection open");
     while (!d.connected && !d.failed && now_ms() < deadline) pump(&d);
     if (!d.connected || !d.issued || d.failed)
@@ -593,13 +643,7 @@ cleanup:
             }
         }
     }
-    if (d.twin_initialized) az_iot_mqttv5_twin_client_deinit(&d.twin);
-    if (d.methods_initialized) az_iot_mqttv5_direct_method_client_deinit(&d.methods);
-    if (d.custom_initialized) az_iot_mqttv5_custom_topic_client_deinit(&d.custom);
-    if (d.telemetry_initialized) az_iot_mqttv5_telemetry_client_deinit(&d.telemetry);
-    if (d.connection_initialized) az_iot_connection_client_deinit(&d.connection);
-    if (v3) az_iot_paho_factory_destroy(v3);
-    if (v5) az_iot_paho_factory_destroy(v5);
+    deinitialize_clients(&d);
     if (provider_initialized) az_iot_certificate_provider_managed_deinit(&provider);
     if (completion_allowed(&d, exit_code))
     {

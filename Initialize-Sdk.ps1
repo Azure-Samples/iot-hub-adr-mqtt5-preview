@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([string]$SdkRoot)
 $ErrorActionPreference = 'Stop'
-$pin = '798941ba4440c5f540084af4863c0cd40b4f9624'
+$pin = '62f7f9580c67a8275f3c92287919ba40c01d472c'
 if (-not $SdkRoot) {
     $SdkRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "MqttV5Samples\sdk\$pin"
 }

@@ -7,9 +7,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="$(IotSdkDirectory)\dotnet\src\Microsoft.Azure.Iot.Device\Microsoft.Azure.Iot.Device.csproj" />
+    <PackageReference Include="Microsoft.Azure.Iot.Device" Version="2.0.0-preview4" />
   </ItemGroup>
-  <Target Name="RequirePinnedSdk" BeforeTargets="PrepareForBuild">
-    <Error Condition="'$(IotSdkDirectory)' == ''" Text="Build through Run-Sample.ps1 or set IotSdkDirectory to the verified SDK checkout." />
-  </Target>
 </Project>
