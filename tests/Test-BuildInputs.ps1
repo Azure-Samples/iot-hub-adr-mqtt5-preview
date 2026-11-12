@@ -1,0 +1,41 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+#requires -Version 7.4
+$ErrorActionPreference = 'Stop'
+$sampleRoot = Split-Path $PSScriptRoot
+$runner = Join-Path $sampleRoot 'Run-Sample.ps1'
+$cases = @(
+    @{},
+    @{ CDependencyDirectory = 'unused-dependencies' },
+    @{ COpenSslRoot = 'unused-openssl' },
+    @{ CDependencyDirectory = ' '; COpenSslRoot = 'unused-openssl' },
+    @{ CDependencyDirectory = 'unused-dependencies'; COpenSslRoot = ' ' }
+)
+foreach ($case in $cases) {
+    $rejected = $false
+    try {
+        & $runner -BuildOnly -Language c @case
+    }
+    catch {
+        if ($_.Exception.Message -notlike 'Building C requires *') { throw }
+        $rejected = $true
+    }
+    if (-not $rejected) { throw 'Incomplete C build inputs were accepted.' }
+}
+$build = Get-Command (Join-Path $sampleRoot 'device-c\Build.ps1')
+foreach ($name in @('SdkRoot', 'DependencyDirectory', 'OpenSslRoot')) {
+    $mandatory = @($build.Parameters[$name].Attributes |
+        Where-Object { $_ -is [Management.Automation.ParameterAttribute] -and $_.Mandatory })
+    if ($mandatory.Count -eq 0) { throw "C build parameter must be mandatory: $name" }
+}
+$rejected = $false
+try {
+    & $runner -BuildOnly -Language dotnet -SdkRoot 'unused-sdk'
+}
+catch {
+    if ($_.Exception.Message -notlike '-SdkRoot applies only to C builds.*') { throw }
+    $rejected = $true
+}
+if (-not $rejected) { throw '.NET source SDK override was silently ignored.' }
+Write-Output 'Build-input validation passed: 6 runner rejection cases and 3 mandatory C build parameters.'

@@ -1,0 +1,48 @@
+Azure IoT Hub MQTT v5 and ADR preview samples
+
+Dependency information
+----------------------
+
+This source repository does not bundle the external dependency source trees
+or pre-built binaries used by its build. Dependencies are restored or prepared
+separately and retain their own licenses. This inventory identifies the direct
+SDK and native library dependencies; it is not a complete transitive dependency
+inventory or a replacement for their license and notice files.
+
+.NET device SDK
+  Microsoft.Azure.Iot.Device 2.0.0-preview4
+  License: MIT
+  https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4
+
+.NET verifier libraries
+  Azure.Identity 1.13.2: MIT
+  https://www.nuget.org/packages/Azure.Identity/1.13.2
+  Azure.Messaging.EventHubs 5.12.2: MIT
+  https://www.nuget.org/packages/Azure.Messaging.EventHubs/5.12.2
+  Microsoft.Azure.Devices 1.41.1: MIT
+  https://www.nuget.org/packages/Microsoft.Azure.Devices/1.41.1
+
+C device SDK
+  Azure IoT SDK, c/2.0.0-preview.2
+  Commit: 62f7f9580c67a8275f3c92287919ba40c01d472c
+  License: MIT
+  https://github.com/Azure/azure-iot-sdk
+
+C SDK dependencies
+  Azure SDK for Embedded C 1.5.0
+  License: MIT
+  https://github.com/Azure/azure-sdk-for-c
+
+  Eclipse Paho MQTT C v1.3.16, with patches supplied by the pinned C device SDK
+  License: Eclipse Public License 2.0 OR Eclipse Distribution License 1.0
+  SPDX: EPL-2.0 OR BSD-3-Clause
+  https://github.com/eclipse/paho.mqtt.c
+  Preserve the upstream LICENSE, NOTICE, and edl-v10 files with that dependency.
+
+  OpenSSL 3.x
+  License: Apache License 2.0
+  https://www.openssl.org/source/license.html
+
+If you redistribute compiled samples or dependency code, review the complete
+resolved dependency set and include all notices and license material required
+for that distribution. Do not remove upstream copyright or license notices.
